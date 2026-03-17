@@ -1,4 +1,5 @@
-# План тестирования и тест-кейсы для задания T1
+
+# План тестирования
 **REST API:** `GET /products/{productId}/status?authToken=&recalculate=&owner=&region=`
  
 ---
@@ -35,20 +36,19 @@ GET /products/{productId}/status?authToken=&recalculate=&owner=&region=
 | Техника | Где применяется |
 |---|---|
 | Эквивалентное разбиение | Все параметры: валидные / невалидные значения |
-| Граничные значения (BVA) | `authToken`: 15, 16, 17 символов |
+| Граничные значения (BVA) | `authToken`: 15, 17 символов |
 | Таблица принятия решений | Комбинации `authToken` + `productId` |
 | Попарное тестирование (Pairwise) | Необязательные параметры: `recalculate`, `owner`, `region` |
 | Предугадывание ошибок | Нестандартные случаи: пустой токен, спецсимволы, пробелы, большой productId, SQL-инъекция |
  
 ---
  
-
 ## 5. Допустимые значения параметров
  
 | Параметр | Допустимые значения |
 |---|---|
-| `recalculate` | `true`, `false`, `null`/отсутствует|
-| `owner` | `Создатель`, `Пользователь`, `null`/отсутствует|
+| `recalculate` | `true`, `false`, `null`/отсутствует |
+| `owner` | `Создатель`, `Пользователь`, `null`/отсутствует |
 | `region` | `Северо-Запад`, `Сибирь`, `Поволжье`, `null`/отсутствует |
 | `authToken` | 16 символов, содержащих буквы (a-z, A-Z) и цифры (0-9), обязательно наличие обоих типов |
 | `productId` | Числовой идентификатор существующего продукта |
@@ -62,16 +62,25 @@ GET /products/{productId}/status?authToken=&recalculate=&owner=&region=
 | Валидный `authToken` | `Ab1Cd2Ef3Gh4Ij5K` | Ровно 16 символов, содержит буквы и цифры |
 | `authToken` 15 символов | `Ab1Cd2Ef3Gh4Ij5` | Ниже нижней границы (BVA) |
 | `authToken` 17 символов | `Ab1Cd2Ef3Gh4Ij5K6` | Выше верхней границы (BVA) |
+| Невалидный `authToken` | `InvalidToken#000` | Содержит символ # |
+| `authToken` со спецсимволами, 16 символов | `Ab1Cd2Ef3Gh4!@#$` | Содержит спецсимволы `!@#$` |
+| `authToken` только из букв, 16 символов | `AbCdEfGhIjKlMnOp` | Отсутствуют цифры |
+| `authToken` только из цифр, 16 символов | `1234567890123456` | Отсутствуют буквы |
+| `authToken` с пробелом внутри | `Ab1Cd2 Ef3Gh4IjK` | Содержит пробел на 7-й позиции |
+| `authToken` из символов кириллицы, 16 символов | `АбвГдеЁжЗиКлМнОп` | Символы вне допустимого набора (a-z, A-Z, 0-9) |
+| `authToken` из 16 пробелов | `                ` | 16 пробелов, длина формально совпадает с допустимой |
 | Существующий продукт, статус 1 | `productId=1` | Продукт в статусе «Готов» для проверки `productStatus=1` |
 | Существующий продукт, статус 0 | `productId=2` | Продукт в статусе «Не готов» для проверки `productStatus=0` |
 | Несуществующий продукт | `productId=99999` | Заведомо отсутствующий ID для проверки 404 |
- 
+| `productId` для ошибки 500 | `99999999999999999999999999999` | Очень большое число |
+| Невалидный тип `productId` | `abc` | Строка вместо числа для проверки обработки неверного типа данных |
+| SQL-инъекция | `Создатель' OR 1=1--` | Классический пейлоад для проверки безопасности (экранирования символов) |
 ---
  
 ## 7. Виды тестирования
  
 - Функциональное тестирование
-- Тестирование методом чёрного ящика
+- Тестирование методом черного ящика
 - Позитивное и негативное тестирование
  
 ---
@@ -82,21 +91,20 @@ GET /products/{productId}/status?authToken=&recalculate=&owner=&region=
 > 1. Тестовое окружение доступно по адресу `{BASE_URL}`
 > 2. В системе существует `productId=1` (productStatus=1) и `productId=2` (productStatus=0)
 > 3. Валидный `authToken`: `Ab1Cd2Ef3Gh4Ij5K`
-> 4. Настроен HTTP-клиент с поддержкой GET-запросов
+> 4. Инструмент для выполнения запросов: Postman (или curl). GET-запрос отправляется на `{BASE_URL}`, ответ проверяется в теле и заголовках ответа.
  
 ---
  
 ### 8.1. Позитивные сценарии, смоук-тесты
  
-Цель: убедиться, что эндпоинт отвечает 200 OK при минимальном наборе валидных параметров.
+Цель: убедиться, что эндпоинт отвечает 200 OK при минимальном наборе параметров.
  
 | ID | Название | Предусловия | Шаги | Ожидаемый результат | Постусловие |
 |---|---|---|---|---|---|
-| TC_POS_001 | Запрос без необязательных параметров | Общие | `GET /products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 200 OK, тело: `{"productStatus": 1}` | не требуется |
+| TC_POS_001 | Запрос статуса продукта без необязательных параметров | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | HTTP-код: **200 OK**. Тело ответа: `{"productStatus": 1}`. Поле `productStatus` присутствует, тип число, значение равно `1`. | не требуется |
  
 ---
  
-
 ### 8.2. Попарное тестирование (Pairwise), необязательные параметры
  
 Цель: проверить комбинации необязательных параметров с минимальным числом сценариев.
@@ -110,8 +118,8 @@ GET /products/{productId}/status?authToken=&recalculate=&owner=&region=
  
 **Общий шаблон:**
 - Предусловия: общие
-- Шаги: `GET {BASE_URL}/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K&recalculate={recalculate}&owner={owner}&region={region}`
-- Ожидаемый результат: 200 OK, тело: `{"productStatus": 1}`
+- Шаги: Отправить GET-запрос на `{BASE_URL}/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K&recalculate={recalculate}&owner={owner}&region={region}`
+- Ожидаемый результат: HTTP-код **200 OK**. Тело ответа: `{"productStatus": 1}`. Поле `productStatus` присутствует, тип - число, значение равно `1`.
  
 | ID | `recalculate` | `owner` | `region` |
 |---|---|---|---|
@@ -136,28 +144,27 @@ GET /products/{productId}/status?authToken=&recalculate=&owner=&region=
  
 | | 1 | 2 | 3 | 4 |
 |---|---|---|---|---|
-| `authToken` валидный | + | + | - | - |
+| `authToken` из 16 букв и цифр | + | + | - | - |
 | `productId` существует | + | - | + | - |
 | **Ожидаемый HTTP-код** | **200** | **404** | **401** | **401** |
  
 | ID | Название | Предусловия | Шаги | Ожидаемый результат | Постусловие |
 |---|---|---|---|---|---|
-| TC_DEC_001 | productId=2 существует, productStatus=0 | Общие + productId=2 в статусе «Не готов» | `GET /products/2/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 200 OK, тело: `{"productStatus": 0}` | не требуется |
-| TC_DEC_002 | Продукт не найден, токен верный | Общие + убедиться что productId=99999 не существует | `GET /products/99999/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 404 Not Found | не требуется |
-| TC_DEC_003 | Продукт существует, токен неверный | Общие | `GET /products/1/status?authToken=InvalidToken000` | 401 Unauthorized | не требуется |
-| TC_DEC_004 | Продукт не найден, токен неверный | Общие + убедиться что productId=99999 не существует | `GET /products/99999/status?authToken=InvalidToken000` | 401 Unauthorized | не требуется |
+| TC_DEC_001 | Запрос статуса продукта, productStatus=0 | Общие + productId=2 в статусе «Не готов» | Отправить GET-запрос на `/products/2/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | HTTP-код: **200 OK**. Тело ответа: `{"productStatus": 0}`. Поле `productStatus` присутствует, тип - число, значение равно `0`. | не требуется |
+| TC_DEC_002 | Запрос статуса продукта, productId отсутствует в системе | Общие + убедиться, что productId=99999 не существует | Отправить GET-запрос на `/products/99999/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | HTTP-код: **404 Not Found**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_DEC_003 | Запрос статуса продукта, authToken из невалидных символов | Общие | Отправить GET-запрос на `/products/1/status?authToken=InvalidToken#000` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_DEC_004 | Запрос статуса продукта, authToken из невалидных символов и productId отсутствует в системе | Общие + убедиться, что productId=99999 не существует | Отправить GET-запрос на `/products/99999/status?authToken=InvalidToken#000` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
  
 ---
  
 ### 8.4. Граничные значения (BVA), authToken
  
-Цель: проверить, что принимается токен ровно 16 символов, а 15 и 17 отклоняются.
+Цель: проверить, что токены длиной в 15 и 17 символов отклоняются.
  
 | ID | Название | Предусловия | Шаги | Ожидаемый результат | Постусловие |
 |---|---|---|---|---|---|
-| TC_BVA_001 | authToken 15 символов (ниже границы) | Общие | `GET /products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5` | 401 Unauthorized | не требуется |
-| TC_BVA_002 | authToken 16 символов (граница, принимается) | Общие | `GET /products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 200 OK, тело: `{"productStatus": 1}` | не требуется |
-| TC_BVA_003 | authToken 17 символов (выше границы) | Общие | `GET /products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K6` | 401 Unauthorized | не требуется |
+| TC_BVA_001 | Запрос статуса продукта, authToken длиной 15 символов | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_BVA_002 | Запрос статуса продукта, authToken длиной 17 символов | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K6` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
  
 ---
  
@@ -167,37 +174,24 @@ GET /products/{productId}/status?authToken=&recalculate=&owner=&region=
  
 | ID | Название | Предусловия | Шаги | Ожидаемый результат | Постусловие |
 |---|---|---|---|---|---|
-| TC_ERR_001 | `authToken` отсутствует | Общие | `GET /products/1/status` (без параметра) | 401 Unauthorized | не требуется |
-| TC_ERR_002 | `authToken` пустой | Общие | `GET /products/1/status?authToken=` | 401 Unauthorized | не требуется |
-| TC_ERR_003 | `authToken` содержит спецсимволы (16 символов) | Общие | `GET ...?authToken=Ab1Cd2Ef3Gh4!@#$` | 401 Unauthorized | не требуется |
-| TC_ERR_004 | `authToken` только буквы (16 символов) | Общие | `GET ...?authToken=AbCdEfGhIjKlMnOp` | 401 Unauthorized | не требуется |
-| TC_ERR_005 | `authToken` только цифры (16 символов) | Общие | `GET ...?authToken=1234567890123456` | 401 Unauthorized | не требуется |
-| TC_ERR_006 | `authToken` с пробелом внутри | Общие | `GET ...?authToken=Ab1Cd2 Ef3Gh4IjK` | 401 Unauthorized | не требуется |
-| TC_ERR_007 | `authToken` кириллица (16 символов) | Общие | `GET ...?authToken=АбвГдеЁжЗиКлМнОп` | 401 Unauthorized | не требуется |
-| TC_ERR_008 | `authToken` 16 пробелов | Общие | `GET ...?authToken=                ` | 401 Unauthorized | не требуется |
-| TC_ERR_009 | `productId=0` | Общие + убедиться что productId=0 не существует | `GET /products/0/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 404 Not Found | не требуется |
-| TC_ERR_010 | `productId` отрицательный | Общие | `GET /products/-1/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 404 Not Found | не требуется |
-| TC_ERR_011 | `productId` строковый | Общие | `GET /products/abc/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 404 Not Found | не требуется |
-| TC_ERR_012 | `productId` очень большое число | Общие + убедиться что productId=999999999999999999 не существует | `GET /products/999999999999999999/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 404 Not Found | не требуется |
-| TC_ERR_013 | `productId` пустой путь | Общие | `GET /products//status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 404 Not Found | не требуется |
-| TC_ERR_014 | `recalculate` - недопустимое значение | Общие | `GET ...?authToken=Ab1Cd2Ef3Gh4Ij5K&recalculate=yes` | 200 OK (параметр игнорируется как необязательный) | не требуется |
-| TC_ERR_015 | `recalculate` - верхний регистр | Общие | `GET ...?authToken=Ab1Cd2Ef3Gh4Ij5K&recalculate=TRUE` | 200 OK (параметр игнорируется как необязательный) | не требуется |
-| TC_ERR_016 | `owner` - недопустимое значение | Общие | `GET ...?authToken=Ab1Cd2Ef3Gh4Ij5K&owner=Администратор` | 200 OK (параметр игнорируется как необязательный) | не требуется |
-| TC_ERR_017 | `owner` - нижний регистр | Общие | `GET ...?authToken=Ab1Cd2Ef3Gh4Ij5K&owner=создатель` | 200 OK (параметр игнорируется как необязательный) | не требуется |
-| TC_ERR_018 | `region` - недопустимое значение | Общие | `GET ...?authToken=Ab1Cd2Ef3Gh4Ij5K&region=Москва` | 200 OK (параметр игнорируется как необязательный) | не требуется |
-| TC_ERR_019 | SQL-инъекция в параметре `owner` | Общие | `GET ...?authToken=Ab1Cd2Ef3Gh4Ij5K&owner=Создатель' OR 1=1--` | 200 OK (параметр игнорируется как необязательный), сервер не возвращает 500 | не требуется |
-| TC_ERR_020 | Массив значений в параметре `region` | Общие | `GET ...?authToken=Ab1Cd2Ef3Gh4Ij5K&region[]=Сибирь&region[]=Поволжье` | 200 OK (параметр игнорируется как необязательный) | не требуется |
- 
+| TC_ERR_001 | Запрос статуса продукта, параметр authToken отсутствует | Общие | Отправить GET-запрос на `/products/1/status` без параметра authToken | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_ERR_002 | Запрос статуса продукта, authToken пустая строка | Общие | Отправить GET-запрос на `/products/1/status?authToken=` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_ERR_003 | Запрос статуса продукта, authToken из спецсимволов длиной 16 | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4!@#$` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_ERR_004 | Запрос статуса продукта, authToken только из букв длиной 16 | Общие | Отправить GET-запрос на `/products/1/status?authToken=AbCdEfGhIjKlMnOp` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_ERR_005 | Запрос статуса продукта, authToken только из цифр длиной 16 | Общие | Отправить GET-запрос на `/products/1/status?authToken=1234567890123456` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_ERR_006 | Запрос статуса продукта, authToken содержит пробел внутри | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2 Ef3Gh4IjK` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_ERR_007 | Запрос статуса продукта, authToken из символов кириллицы длиной 16 | Общие | Отправить GET-запрос на `/products/1/status?authToken=АбвГдеЁжЗиКлМнОп` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_ERR_008 | Запрос статуса продукта, authToken из 16 пробелов | Общие | Отправить GET-запрос на `/products/1/status?authToken=                ` | HTTP-код: **401 Unauthorized**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_ERR_009 | Запрос статуса продукта, productId=0 | Общие + убедиться, что productId=0 не существует | Отправить GET-запрос на `/products/0/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | HTTP-код: **404 Not Found**. Поле `productStatus` отсутствует в теле ответа. | не требуется |
+| TC_ERR_010 | Запрос статуса продукта, productId отрицательное число (-1) | Общие | Отправить GET-запрос на `/products/-1/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | HTTP-код: **404 Not Found**. Поле `productStatus` отсутствует в теле ответа. (примечание: поведение не специфицировано в ТЗ; возможен также 400 Bad Request) | не требуется |
+| TC_ERR_011 | Запрос статуса продукта, productId строковое значение | Общие | Отправить GET-запрос на `/products/abc/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | HTTP-код: **404 Not Found** или **400 Bad Request**. Поле `productStatus` отсутствует в теле ответа. (примечание: поведение не специфицировано в ТЗ) | не требуется |
+| TC_ERR_012 | Запрос статуса продукта, productId очень большое число | Общие | Отправить GET-запрос на `/products/99999999999999999999999999999/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | HTTP-код: **500 Internal Server Error**. Тело ответа в формате JSON, содержит ключ `errorMessage`. Пример: `{"errorMessage": "Internal server error"}`| не требуется |
+| TC_ERR_013 | Запрос статуса продукта, productId пустой сегмент в пути | Общие | Отправить GET-запрос на `/products//status?authToken=Ab1Cd2Ef3Gh4Ij5K` | HTTP-код: **404 Not Found** или **400 Bad Request**. Поле `productStatus` отсутствует в теле ответа. (примечание: поведение не специфицировано в ТЗ) | не требуется |
+| TC_ERR_014 | Запрос статуса продукта, recalculate=yes | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K&recalculate=yes` | (примечание: поведение не специфицировано в ТЗ, предположительно HTTP-код **200 OK**, параметр игнорируется) | не требуется |
+| TC_ERR_015 | Запрос статуса продукта, recalculate=TRUE (верхний регистр) | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K&recalculate=TRUE` | (примечание: поведение не специфицировано в ТЗ, предположительно HTTP-код **200 OK**, параметр игнорируется) | не требуется |
+| TC_ERR_016 | Запрос статуса продукта, owner=Администратор | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K&owner=Администратор` | (примечание: поведение не специфицировано в ТЗ, предположительно HTTP-код **200 OK**, параметр игнорируется) | не требуется |
+| TC_ERR_017 | Запрос статуса продукта, owner=создатель (нижний регистр) | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K&owner=создатель` | (примечание: поведение не специфицировано в ТЗ, предположительно HTTP-код **200 OK**, параметр игнорируется) | не требуется |
+| TC_ERR_018 | Запрос статуса продукта, region=Москва | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K&region=Москва` | (примечание: поведение не специфицировано в ТЗ, предположительно HTTP-код **200 OK**, параметр игнорируется) | не требуется |
+| TC_ERR_019 | Запрос статуса продукта, SQL-инъекция в параметре owner | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K&owner=Создатель' OR 1=1--` | (примечание: поведение не специфицировано в ТЗ, предположительно HTTP-код **200 OK**, параметр игнорируется) Сервер не возвращает **500**. | не требуется |
+| TC_ERR_020 | Запрос статуса продукта, массив значений в параметре region | Общие | Отправить GET-запрос на `/products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K&region[]=Сибирь&region[]=Поволжье` | (примечание: поведение не специфицировано в ТЗ, предположительно HTTP-код **200 OK**, параметр игнорируется) | не требуется |
 ---
- 
-### 8.6. Проверка формата ответа
- 
-Цель: проверить соответствие структуры ответа требованиям ТЗ для каждого HTTP-кода.
- 
-| ID | Название | Предусловия | Шаги | Ожидаемый результат | Постусловие |
-|---|---|---|---|---|---|
-| TC_FMT_001 | Тело ответа 200 - структура JSON | Общие | `GET /products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 200 OK. Тело является валидным JSON. Присутствует поле `productStatus`. Пример: `{"productStatus": 1}` | не требуется |
-| TC_FMT_002 | `productStatus` принимает только 0 или 1 | Общие + productId=1 (статус 1) и productId=2 (статус 0) | 1. `GET /products/1/status?authToken=Ab1Cd2Ef3Gh4Ij5K` 2. `GET /products/2/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | Шаг 1: `{"productStatus": 1}`. Шаг 2: `{"productStatus": 0}`. Значение не равно `"true"`, `2`, `null`, `"1"` | не требуется |
-| TC_FMT_003 | Формат ответа при 401 | Общие | `GET /products/1/status?authToken=InvalidToken000` | 401 Unauthorized. Если тело ответа присутствует — оно является валидным JSON | не требуется |
-| TC_FMT_004 | Формат ответа при 404 | Общие + убедиться что productId=99999 не существует | `GET /products/99999/status?authToken=Ab1Cd2Ef3Gh4Ij5K` | 404 Not Found. Если тело ответа присутствует — оно является валидным JSON | не требуется |
-| TC_FMT_005 | Тело 500 - структура `errorMessage` | Общие + воспроизвести серверную ошибку | Запрос, вызывающий 500 Internal Server Error | 500 Internal Server Error. Тело: `{"errorMessage": "..."}`, поле не пустое и не null | не требуется |
